@@ -1,6 +1,6 @@
 export type SimpleCovJsonResult = {
-    coverage: RawCoverages
-    groups: any
+  coverage: RawCoverages
+  groups: RawGroups
 }
 
 type RawCoverages = {
@@ -10,6 +10,18 @@ type RawCoverages = {
 type RawCoverage = {
   lines: LineCoverage
   branches: BranchCoverage
+}
+
+type RawGroups = {
+  [name: string]: RawGroup
+}
+
+type RawGroup = {
+  lines: LineGroup
+}
+
+type LineGroup = {
+  covered_percent: number
 }
 
 type LineCoverage = (number | null)[]
@@ -27,6 +39,11 @@ type FileCoverage = {
   filename: string
   lines: number
   branches: number
+}
+
+type GroupCoverage = {
+  name: string
+  covered_percent: number
 }
 
 function floor(n: number, digits = 0): number {
@@ -65,22 +82,38 @@ function branchesCoverages(coverage: BranchCoverage): number {
 
 export class Coverage {
   files: FileCoverage[]
+  groups: GroupCoverage[]
 
   constructor(resultset: SimpleCovJsonResult) {
     this.files = []
-      for (const [filename, coverage] of Object.entries(resultset.coverage)) {
-        this.files.push({
-          filename,
-          lines: linesCoverage(coverage.lines),
-          branches: branchesCoverages(coverage.branches)
-        })
-      }
+    for (const [filename, coverage] of Object.entries(resultset.coverage)) {
+      this.files.push({
+        filename,
+        lines: linesCoverage(coverage.lines),
+        branches: branchesCoverages(coverage.branches)
+      })
+    }
+    this.groups = []
+    for (const [name, info] of Object.entries(resultset.groups)) {
+      this.groups.push({
+        name: name,
+        covered_percent: info.lines.covered_percent
+      })
+    }
   }
 
   filesMap(): Map<string, FileCoverage> {
     const map = new Map<string, FileCoverage>()
     for (const fileCov of this.files) {
       map.set(fileCov.filename, fileCov)
+    }
+    return map
+  }
+
+  groupsMap(): Map<string, GroupCoverage> {
+    const map = new Map<string, GroupCoverage>()
+    for (const groupCov of this.groups) {
+      map.set(groupCov.name, groupCov)
     }
     return map
   }
@@ -103,9 +136,38 @@ export function getCoverageDiff(
   return diff
 }
 
+export function getGroupDiff(
+  cov1: Coverage,
+  cov2: Coverage,
+  diffOnly: boolean
+): GroupCoverageDiff[] {
+  const diff: GroupCoverageDiff[] = []
+  const cov1Groups = cov1.groupsMap()
+  const cov2Groups = cov2.groupsMap()
+  for (const groupName of mergeGroups(cov1, cov2)) {
+    const fcov1 = cov1Groups.get(groupName)
+    const fcov2 = cov2Groups.get(groupName)
+    if (diffOnly) {
+      if (fcov1?.covered_percent !== fcov2?.covered_percent) {
+        diff.push(makeGroupDiff(fcov1, fcov2))
+      }
+    } else {
+      diff.push(makeGroupDiff(fcov1, fcov2))
+    }
+  }
+  return diff
+}
+
 function mergeFilenames(cov1: Coverage, cov2: Coverage): string[] {
   const files1 = cov1.files.map(f => f.filename)
   const files2 = cov2.files.map(f => f.filename)
+  const files = new Set<string>([...files1, ...files2])
+  return Array.from(files).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+}
+
+function mergeGroups(cov1: Coverage, cov2: Coverage): string[] {
+  const files1 = cov1.groups.map(f => f.name)
+  const files2 = cov2.groups.map(f => f.name)
   const files = new Set<string>([...files1, ...files2])
   return Array.from(files).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 }
@@ -141,6 +203,12 @@ export type FileCoverageDiff = {
   }
 }
 
+export type GroupCoverageDiff = {
+  name: string
+  from: number | null
+  to: number | null
+}
+
 function makeDiff(cov1?: FileCoverage, cov2?: FileCoverage): FileCoverageDiff {
   if (!cov1 && !cov2) {
     throw new Error('no coverages')
@@ -164,5 +232,36 @@ function makeDiff(cov1?: FileCoverage, cov2?: FileCoverage): FileCoverageDiff {
     filename: cov1!.filename,
     lines: {from: cov1!.lines, to: cov2!.lines},
     branches: {from: cov1!.branches, to: cov2!.branches}
+  }
+}
+
+function makeGroupDiff(
+  cov1?: GroupCoverage,
+  cov2?: GroupCoverage
+): GroupCoverageDiff {
+  if (!cov1 && !cov2) {
+    throw new Error('no coverages')
+  }
+
+  if (!cov1 && cov2) {
+    return {
+      name: cov2.name,
+      from: null,
+      to: cov2.covered_percent
+    }
+  }
+
+  if (!cov2 && cov1) {
+    return {
+      name: cov1.name,
+      from: cov1.covered_percent,
+      to: null
+    }
+  }
+
+  return {
+    name: cov1!.name,
+    from: cov1!.covered_percent,
+    to: cov2!.covered_percent
   }
 }

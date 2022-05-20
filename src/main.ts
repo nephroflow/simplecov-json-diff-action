@@ -7,7 +7,9 @@ import {
   SimpleCovJsonResult,
   Coverage,
   getCoverageDiff,
-  FileCoverageDiff
+  FileCoverageDiff,
+  getGroupDiff,
+  GroupCoverageDiff
 } from './simplecov'
 
 const WORKSPACE: string = process.env.GITHUB_WORKSPACE!
@@ -78,6 +80,10 @@ function formatDiff(diff: FileCoverageDiff): [string, string, string] {
   ]
 }
 
+function formatGroupDiff(diff: GroupCoverageDiff): [string, string] {
+  return [diff.name, formatDiffItem({from: diff.from, to: diff.to})]
+}
+
 async function run(): Promise<void> {
   try {
     const resultsetPaths = {
@@ -104,19 +110,29 @@ async function run(): Promise<void> {
     }
 
     const diff = getCoverageDiff(coverages.base, coverages.head)
+    const groupDiff = getGroupDiff(coverages.base, coverages.head, false)
 
-    let content: string
+    let fileDiffContent: string
     if (diff.length === 0) {
-      content = 'No differences'
+      fileDiffContent = 'No differences'
     } else {
-      content = markdownTable([
+      fileDiffContent = markdownTable([
         ['Filename', 'Lines', 'Branches'],
         ...diff.map(formatDiff)
       ])
     }
 
-    const message = `## Coverage difference
-${content}
+    let groupDiffContent: string
+    groupDiffContent = markdownTable([
+      ['Name', 'Coverage'],
+      ...groupDiff.map(formatGroupDiff)
+    ])
+
+    const message = `## Group summary difference
+${groupDiffContent}
+
+## Coverage difference
+${fileDiffContent}
 `
 
     /**

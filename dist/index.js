@@ -658,6 +658,9 @@ function formatDiff(diff) {
         formatDiffItem(diff.branches)
     ];
 }
+function formatGroupDiff(diff) {
+    return [diff.name, formatDiffItem({ from: diff.from, to: diff.to })];
+}
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -680,18 +683,27 @@ function run() {
                 head: new simplecov_1.Coverage(resultsets.head)
             };
             const diff = simplecov_1.getCoverageDiff(coverages.base, coverages.head);
-            let content;
+            const groupDiff = simplecov_1.getGroupDiff(coverages.base, coverages.head, false);
+            let fileDiffContent;
             if (diff.length === 0) {
-                content = 'No differences';
+                fileDiffContent = 'No differences';
             }
             else {
-                content = markdown_table_1.default([
+                fileDiffContent = markdown_table_1.default([
                     ['Filename', 'Lines', 'Branches'],
                     ...diff.map(formatDiff)
                 ]);
             }
-            const message = `## Coverage difference
-${content}
+            let groupDiffContent;
+            groupDiffContent = markdown_table_1.default([
+                ['Name', 'Coverage'],
+                ...groupDiff.map(formatGroupDiff)
+            ]);
+            const message = `## Group summary difference
+${groupDiffContent}
+
+## Coverage difference
+${fileDiffContent}
 `;
             /**
              * Publish a comment in the PR with the diff result.
@@ -6423,7 +6435,7 @@ exports.checkBypass = checkBypass;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCoverageDiff = exports.Coverage = void 0;
+exports.getGroupDiff = exports.getCoverageDiff = exports.Coverage = void 0;
 function floor(n, digits = 0) {
     const d = Math.pow(10, digits);
     const x = Math.floor(n * d);
@@ -6462,11 +6474,25 @@ class Coverage {
                 branches: branchesCoverages(coverage.branches)
             });
         }
+        this.groups = [];
+        for (const [name, info] of Object.entries(resultset.groups)) {
+            this.groups.push({
+                name: name,
+                covered_percent: info.lines.covered_percent
+            });
+        }
     }
     filesMap() {
         const map = new Map();
         for (const fileCov of this.files) {
             map.set(fileCov.filename, fileCov);
+        }
+        return map;
+    }
+    groupsMap() {
+        const map = new Map();
+        for (const groupCov of this.groups) {
+            map.set(groupCov.name, groupCov);
         }
         return map;
     }
@@ -6486,9 +6512,34 @@ function getCoverageDiff(cov1, cov2) {
     return diff;
 }
 exports.getCoverageDiff = getCoverageDiff;
+function getGroupDiff(cov1, cov2, diffOnly) {
+    const diff = [];
+    const cov1Groups = cov1.groupsMap();
+    const cov2Groups = cov2.groupsMap();
+    for (const groupName of mergeGroups(cov1, cov2)) {
+        const fcov1 = cov1Groups.get(groupName);
+        const fcov2 = cov2Groups.get(groupName);
+        if (diffOnly) {
+            if ((fcov1 === null || fcov1 === void 0 ? void 0 : fcov1.covered_percent) !== (fcov2 === null || fcov2 === void 0 ? void 0 : fcov2.covered_percent)) {
+                diff.push(makeGroupDiff(fcov1, fcov2));
+            }
+        }
+        else {
+            diff.push(makeGroupDiff(fcov1, fcov2));
+        }
+    }
+    return diff;
+}
+exports.getGroupDiff = getGroupDiff;
 function mergeFilenames(cov1, cov2) {
     const files1 = cov1.files.map(f => f.filename);
     const files2 = cov2.files.map(f => f.filename);
+    const files = new Set([...files1, ...files2]);
+    return Array.from(files).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+function mergeGroups(cov1, cov2) {
+    const files1 = cov1.groups.map(f => f.name);
+    const files2 = cov2.groups.map(f => f.name);
     const files = new Set([...files1, ...files2]);
     return Array.from(files).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
@@ -6532,6 +6583,30 @@ function makeDiff(cov1, cov2) {
         filename: cov1.filename,
         lines: { from: cov1.lines, to: cov2.lines },
         branches: { from: cov1.branches, to: cov2.branches }
+    };
+}
+function makeGroupDiff(cov1, cov2) {
+    if (!cov1 && !cov2) {
+        throw new Error('no coverages');
+    }
+    if (!cov1 && cov2) {
+        return {
+            name: cov2.name,
+            from: null,
+            to: cov2.covered_percent
+        };
+    }
+    if (!cov2 && cov1) {
+        return {
+            name: cov1.name,
+            from: cov1.covered_percent,
+            to: null
+        };
+    }
+    return {
+        name: cov1.name,
+        from: cov1.covered_percent,
+        to: cov2.covered_percent
     };
 }
 
