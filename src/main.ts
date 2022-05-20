@@ -4,7 +4,7 @@ import * as github from '@actions/github'
 import * as core from '@actions/core'
 import markdownTable from 'markdown-table'
 import {
-  ResultSet,
+  SimpleCovJsonResult,
   Coverage,
   getCoverageDiff,
   FileCoverageDiff
@@ -18,9 +18,9 @@ function doesPathExists(filepath: string): void {
   }
 }
 
-function parseResultset(resultsetPath: string): ResultSet {
+function parseResultset(resultsetPath: string): SimpleCovJsonResult {
   const content = fs.readFileSync(path.resolve(WORKSPACE, resultsetPath))
-  return JSON.parse(content.toString()) as ResultSet
+  return JSON.parse(content.toString()) as SimpleCovJsonResult
 }
 
 function truncPercentage(n: number): number {

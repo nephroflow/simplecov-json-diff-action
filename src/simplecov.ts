@@ -1,7 +1,6 @@
-export type ResultSet = {
-  [command: string]: {
+export type SimpleCovJsonResult = {
     coverage: RawCoverages
-  }
+    groups: any
 }
 
 type RawCoverages = {
@@ -68,17 +67,15 @@ function branchesCoverages(coverage: BranchCoverage): number {
 export class Coverage {
   files: FileCoverage[]
 
-  constructor(resultset: ResultSet) {
+  constructor(resultset: SimpleCovJsonResult) {
     this.files = []
-    for (const coverages of Object.values(resultset)) {
-      for (const [filename, coverage] of Object.entries(coverages['coverage'])) {        
+      for (const [filename, coverage] of Object.entries(resultset.coverage)) {
         this.files.push({
           filename,
           lines: linesCoverage(coverage.lines),
           branches: branchesCoverages(coverage.branches)
         })
       }
-    }
   }
 
   filesMap(): Map<string, FileCoverage> {
