@@ -6439,20 +6439,15 @@ function linesCoverage(coverage) {
     return floor((covered / rows) * 100, 2);
 }
 function branchesCoverages(coverage) {
-    const conditions = Object.keys(coverage);
-    if (conditions.length === 0) {
+    if (coverage.length === 0) {
         return 100;
     }
     let total = 0;
     let covered = 0;
-    for (const k of conditions) {
-        const cond = coverage[k];
-        for (const branch of Object.keys(cond)) {
-            total += 1;
-            const hit = cond[branch];
-            if (hit > 0) {
-                covered += 1;
-            }
+    for (const k of coverage) {
+        total += 1;
+        if (k.coverage > 0) {
+            covered += 1;
         }
     }
     return floor((covered / total) * 100, 2);
